@@ -72,6 +72,8 @@ const DEFAULT_TIMEOUT = 60000;
 /** SSE connections through proxies may need longer initial handshake time */
 const SSE_CONNECT_TIMEOUT = 120000;
 const DEFAULT_INIT_TIMEOUT = 30000;
+const MCP_UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
+const MCP_APP_MIME_TYPE = 'text/html;profile=mcp-app';
 
 interface CircuitBreakerState {
   cycleCount: number;
@@ -399,6 +401,9 @@ export class MCPConnection extends EventEmitter {
       this.oauthTokens = params.oauthTokens;
     }
     const enableApps = params.enableApps !== false; // default true
+    const appUiCapability = {
+      mimeTypes: [MCP_APP_MIME_TYPE],
+    };
     this.client = new Client(
       {
         name: '@librechat/api-client',
@@ -407,13 +412,16 @@ export class MCPConnection extends EventEmitter {
       {
         capabilities: enableApps
           ? {
+            // Preferred stable shape used by ext-apps helpers.
+            // Keep `experimental` for backward compatibility with older servers.
+            extensions: {
+              [MCP_UI_EXTENSION_ID]: appUiCapability,
+            },
             experimental: {
-              'io.modelcontextprotocol/ui': {
-                mimeTypes: ['text/html;profile=mcp-app'],
-              },
+              [MCP_UI_EXTENSION_ID]: appUiCapability,
             },
           }
-          : {},
+          : ({} as Record<string, never>),
       },
     );
 
