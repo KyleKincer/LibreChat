@@ -661,6 +661,7 @@ export function createAgentMethods(mongoose: typeof import('mongoose'), deps: Ag
       avatar: 1,
       author: 1,
       description: 1,
+      availableMcpServers: 1,
       updatedAt: 1,
       category: 1,
       support_contact: 1,

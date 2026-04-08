@@ -72,6 +72,7 @@ jest.mock('~/cache', () => ({
 
 const {
   createAgent: createAgentHandler,
+  getAgent: getAgentHandler,
   updateAgent: updateAgentHandler,
   getListAgents: getListAgentsHandler,
 } = require('./v1');
@@ -726,6 +727,45 @@ describe('Agent Controllers - Mass Assignment Protection', () => {
         expect.objectContaining({
           error: 'Invalid request data',
           details: expect.any(Array),
+        }),
+      );
+    });
+  });
+
+  describe('getAgentHandler', () => {
+    test('should include availableMcpServers in the basic view response', async () => {
+      const authorId = new mongoose.Types.ObjectId();
+      const agent = await Agent.create({
+        id: `agent_${uuidv4()}`,
+        name: 'Agent With Optional MCP',
+        provider: 'openai',
+        model: 'gpt-4',
+        author: authorId,
+        description: 'Has optional MCP servers',
+        availableMcpServers: ['confluence', 'product-search'],
+        versions: [
+          {
+            name: 'Agent With Optional MCP',
+            provider: 'openai',
+            model: 'gpt-4',
+            description: 'Has optional MCP servers',
+            availableMcpServers: ['confluence', 'product-search'],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      });
+
+      mockReq.user.id = authorId.toString();
+      mockReq.params.id = agent.id;
+
+      await getAgentHandler(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: agent.id,
+          availableMcpServers: ['confluence', 'product-search'],
         }),
       );
     });

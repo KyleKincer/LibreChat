@@ -3229,6 +3229,21 @@ describe('Support Contact Field', () => {
       expect(result.data[0].name).toBe('Agent A1');
     });
 
+    test('should include availableMcpServers in list results', async () => {
+      await Agent.updateOne(
+        { _id: agentA1._id },
+        { $set: { availableMcpServers: ['confluence', 'product-search'] } },
+      );
+
+      const result = await getListAgentsByAccess({
+        accessibleIds: [agentA1._id],
+        otherParams: {},
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].availableMcpServers).toEqual(['confluence', 'product-search']);
+    });
+
     test('should return multiple accessible agents when provided', async () => {
       // Give User B access to two of User A's agents
       const accessibleIds = [agentA1._id, agentA3._id] as mongoose.Types.ObjectId[];

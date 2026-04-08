@@ -317,6 +317,7 @@ const getAgentHandler = async (req, res, expandProperties = false) => {
         author: agent.author,
         provider: agent.provider,
         model: agent.model,
+        availableMcpServers: agent.availableMcpServers,
         isPublic: agent.isPublic,
         version: agent.version,
         // Safe metadata
