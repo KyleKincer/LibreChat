@@ -37,6 +37,7 @@ export type TModelSpec = {
   executeCode?: boolean;
   artifacts?: string | boolean;
   mcpServers?: string[];
+  availableMcpServers?: string[];
 };
 
 export const tModelSpecSchema = z.object({
@@ -57,6 +58,7 @@ export const tModelSpecSchema = z.object({
   executeCode: z.boolean().optional(),
   artifacts: z.union([z.string(), z.boolean()]).optional(),
   mcpServers: z.array(z.string()).optional(),
+  availableMcpServers: z.array(z.string()).optional(),
 });
 
 export const specsConfigSchema = z.object({

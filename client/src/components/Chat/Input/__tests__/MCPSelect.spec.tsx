@@ -23,12 +23,14 @@ const defaultMcpServerManager = {
 
 let mockCanUseMcp = true;
 let mockMcpServerManager = { ...defaultMcpServerManager };
+let mockAlwaysShowMCPSelect = false;
 
 jest.mock('~/Providers', () => ({
   useBadgeRowContext: () => ({
     conversationId: 'test-conv',
     storageContextKey: undefined,
     mcpServerManager: mockMcpServerManager,
+    alwaysShowMCPSelect: mockAlwaysShowMCPSelect,
   }),
 }));
 
@@ -63,6 +65,7 @@ describe('MCPSelect', () => {
     jest.clearAllMocks();
     mockCanUseMcp = true;
     mockMcpServerManager = { ...defaultMcpServerManager };
+    mockAlwaysShowMCPSelect = false;
   });
 
   it('renders the menu button', () => {
@@ -131,6 +134,42 @@ describe('MCPSelect', () => {
   it('renders nothing when selectableServers is empty', () => {
     mockMcpServerManager = { ...defaultMcpServerManager, selectableServers: [] };
     const { container } = render(<MCPSelect />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('renders the menu button when a server is already selected even if selectableServers is empty', () => {
+    mockMcpServerManager = {
+      ...defaultMcpServerManager,
+      selectableServers: [],
+      mcpValues: ['server-a'],
+      isPinned: false,
+    };
+
+    render(<MCPSelect />);
+
+    expect(screen.getByRole('button')).toBeInTheDocument();
+  });
+
+  it('renders the menu button when alwaysShowMCPSelect is true', () => {
+    mockAlwaysShowMCPSelect = true;
+    mockMcpServerManager = { ...defaultMcpServerManager, isPinned: false, mcpValues: [] };
+
+    render(<MCPSelect />);
+
+    expect(screen.getByRole('button', { name: /MCP Servers/i })).toBeInTheDocument();
+  });
+
+  it('renders nothing when alwaysShowMCPSelect is true but no selectable servers exist', () => {
+    mockAlwaysShowMCPSelect = true;
+    mockMcpServerManager = {
+      ...defaultMcpServerManager,
+      selectableServers: [],
+      isPinned: false,
+      mcpValues: [],
+    };
+
+    const { container } = render(<MCPSelect />);
+
     expect(container.firstChild).toBeNull();
   });
 

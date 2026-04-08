@@ -38,7 +38,12 @@ type PollIntervals = Record<string, NodeJS.Timeout | null>;
 export function useMCPServerManager({
   conversationId,
   storageContextKey,
-}: { conversationId?: string | null; storageContextKey?: string } = {}) {
+  allowedServerNames,
+}: {
+  conversationId?: string | null;
+  storageContextKey?: string;
+  allowedServerNames?: string[];
+} = {}) {
   const localize = useLocalize();
   const queryClient = useQueryClient();
   const { showToast } = useToastContext();
@@ -84,8 +89,19 @@ export function useMCPServerManager({
 
   // Memoize filtered servers for useMCPSelect to prevent infinite loops
   const selectableServers = useMemo(
-    () => availableMCPServers.filter((s) => s.config.chatMenu !== false && !s.consumeOnly),
-    [availableMCPServers],
+    () => {
+      const allowedServerSet = allowedServerNames ? new Set(allowedServerNames) : null;
+      return availableMCPServers.filter((server) => {
+        if (server.config.chatMenu === false || server.consumeOnly) {
+          return false;
+        }
+        if (allowedServerSet && !allowedServerSet.has(server.serverName)) {
+          return false;
+        }
+        return true;
+      });
+    },
+    [availableMCPServers, allowedServerNames],
   );
 
   const { mcpValues, setMCPValues, isPinned, setIsPinned } = useMCPSelect({

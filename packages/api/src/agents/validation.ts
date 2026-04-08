@@ -79,6 +79,7 @@ export const agentBaseSchema = z.object({
   tool_resources: agentToolResourcesSchema,
   tool_options: agentToolOptionsSchema,
   support_contact: agentSupportContactSchema,
+  availableMcpServers: z.array(z.string()).optional(),
   category: z.string().optional(),
 });
 

@@ -352,6 +352,37 @@ describe('Agent Context Utilities', () => {
       expect(agent.instructions).toContain('Ephemeral MCP');
     });
 
+    it('should merge agent MCP servers with ephemeral MCP selections', async () => {
+      const agent = {
+        id: 'test-agent',
+        instructions: 'Base instructions',
+        tools: [
+          new DynamicStructuredTool({
+            name: `tool${Constants.mcp_delimiter}agent-server`,
+            description: 'Test tool',
+            schema: testSchema,
+            func: async () => 'result',
+          }),
+        ],
+      };
+
+      mockMCPManager.formatInstructionsForContext.mockResolvedValue('Merged MCP');
+
+      await applyContextToAgent({
+        agent,
+        sharedRunContext: 'Context',
+        mcpManager: mockMCPManager,
+        ephemeralAgent: { mcp: ['ephemeral-server'] },
+        logger: mockLogger,
+      });
+
+      expect(mockMCPManager.formatInstructionsForContext).toHaveBeenCalledWith(
+        ['agent-server', 'ephemeral-server'],
+        undefined,
+      );
+      expect(agent.instructions).toContain('Merged MCP');
+    });
+
     it('should prefer agent tools over empty ephemeral MCP array', async () => {
       const agent = {
         id: 'test-agent',

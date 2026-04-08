@@ -46,6 +46,7 @@ function createToolLoader(signal, streamId = null, definitionsOnly = false) {
    * @param {string[]} params.tools
    * @param {string} params.provider
    * @param {string} params.model
+   * @param {string[]} [params.availableMcpServers]
    * @param {AgentToolResources} params.tool_resources
    * @returns {Promise<{
    *   tools?: StructuredTool[],
@@ -62,10 +63,11 @@ function createToolLoader(signal, streamId = null, definitionsOnly = false) {
     model,
     agentId,
     provider,
+    availableMcpServers,
     tool_options,
     tool_resources,
   }) {
-    const agent = { id: agentId, tools, provider, model, tool_options };
+    const agent = { id: agentId, tools, provider, model, availableMcpServers, tool_options };
     try {
       return await loadAgentTools({
         req,

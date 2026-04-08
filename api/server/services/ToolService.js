@@ -31,7 +31,7 @@ const {
   imageGenTools,
   EModelEndpoint,
   EToolResources,
-  isActionTool,
+  isActionTool: importedIsActionTool,
   actionDelimiter,
   ImageVisionTool,
   openapiToFunction,
@@ -70,6 +70,17 @@ const { getFlowStateManager } = require('~/config');
 const { getLogStores } = require('~/cache');
 
 const domainSeparatorRegex = new RegExp(actionDomainSeparator, 'g');
+const isActionTool =
+  typeof importedIsActionTool === 'function'
+    ? importedIsActionTool
+    : (toolName) => {
+        const actionIdx = toolName.indexOf(actionDelimiter);
+        if (actionIdx < 0) {
+          return false;
+        }
+        const mcpIdx = toolName.indexOf(Constants.mcp_delimiter);
+        return mcpIdx < 0 || mcpIdx < actionIdx;
+      };
 
 /**
  * Resolves the set of enabled agent capabilities from endpoints config,
@@ -88,6 +99,72 @@ async function resolveAgentCapabilities(req, appConfig, agentId) {
     );
   }
   return capabilities;
+}
+
+function getModelSpecMCPAllowlist(req) {
+  const specName = req.body?.spec;
+  if (!specName) {
+    return [];
+  }
+
+  const modelSpecs = req.config?.modelSpecs?.list;
+  const modelSpec = Array.isArray(modelSpecs)
+    ? modelSpecs.find((spec) => spec.name === specName)
+    : null;
+
+  if (!Array.isArray(modelSpec?.availableMcpServers)) {
+    return [];
+  }
+
+  return modelSpec.availableMcpServers;
+}
+
+function getAgentMCPAllowlist({ req, agent }) {
+  if (Array.isArray(agent?.availableMcpServers)) {
+    return agent.availableMcpServers;
+  }
+
+  return getModelSpecMCPAllowlist(req);
+}
+
+function getRunScopedMCPToolNames({ req, agent }) {
+  const selectedServers = req.body?.ephemeralAgent?.mcp;
+  if (!Array.isArray(selectedServers) || selectedServers.length === 0) {
+    return [];
+  }
+
+  const primaryAgentId = req.body?.agent_id;
+  if (!primaryAgentId || agent?.id !== primaryAgentId) {
+    return [];
+  }
+
+  const allowlist = getAgentMCPAllowlist({ req, agent });
+  if (allowlist.length === 0) {
+    return [];
+  }
+
+  const allowlistSet = new Set(allowlist);
+  const serverNames = Array.from(
+    new Set(
+      selectedServers.filter(
+        (serverName) => typeof serverName === 'string' && allowlistSet.has(serverName),
+      ),
+    ),
+  );
+
+  return serverNames.map(
+    (serverName) => `${Constants.mcp_all}${Constants.mcp_delimiter}${serverName}`,
+  );
+}
+
+function getEffectiveAgentTools({ req, agent }) {
+  const baseTools = Array.isArray(agent?.tools) ? agent.tools : [];
+  const runScopedMCPTools = getRunScopedMCPToolNames({ req, agent });
+  if (runScopedMCPTools.length === 0) {
+    return baseTools;
+  }
+
+  return Array.from(new Set([...baseTools, ...runScopedMCPTools]));
 }
 
 /**
@@ -462,13 +539,15 @@ const isBuiltInTool = (toolName) =>
  * }>}
  */
 async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, tool_resources }) {
-  if (!agent.tools || agent.tools.length === 0) {
+  const effectiveTools = getEffectiveAgentTools({ req, agent });
+
+  if (effectiveTools.length === 0) {
     return { toolDefinitions: [] };
   }
 
   if (
-    agent.tools.length === 1 &&
-    (agent.tools[0] === AgentCapabilities.context || agent.tools[0] === AgentCapabilities.ocr)
+    effectiveTools.length === 1 &&
+    (effectiveTools[0] === AgentCapabilities.context || effectiveTools[0] === AgentCapabilities.ocr)
   ) {
     return { toolDefinitions: [] };
   }
@@ -481,7 +560,7 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
   const actionsEnabled = checkCapability(AgentCapabilities.actions);
   const deferredToolsEnabled = checkCapability(AgentCapabilities.deferred_tools);
 
-  const filteredTools = agent.tools?.filter((tool) => {
+  const filteredTools = effectiveTools.filter((tool) => {
     if (tool === Tools.file_search) {
       return checkCapability(AgentCapabilities.file_search);
     }
@@ -506,9 +585,9 @@ async function loadToolDefinitionsWrapper({ req, res, agent, streamId = null, to
 
   /** @type {Record<string, Record<string, string>>} */
   let userMCPAuthMap;
-  if (agent.tools?.some((t) => t.includes(Constants.mcp_delimiter))) {
+  if (effectiveTools.some((t) => t.includes(Constants.mcp_delimiter))) {
     userMCPAuthMap = await getUserMCPAuthMap({
-      tools: agent.tools,
+      tools: effectiveTools,
       userId: req.user.id,
       findPluginAuthsByKeys,
     });
@@ -832,13 +911,15 @@ async function loadAgentTools({
     return loadToolDefinitionsWrapper({ req, res, agent, streamId, tool_resources });
   }
 
-  if (!agent.tools || agent.tools.length === 0) {
+  const effectiveTools = getEffectiveAgentTools({ req, agent });
+
+  if (effectiveTools.length === 0) {
     return { toolDefinitions: [] };
   } else if (
-    agent.tools &&
-    agent.tools.length === 1 &&
+    effectiveTools.length === 1 &&
     /** Legacy handling for `ocr` as may still exist in existing Agents */
-    (agent.tools[0] === AgentCapabilities.context || agent.tools[0] === AgentCapabilities.ocr)
+    (effectiveTools[0] === AgentCapabilities.context ||
+      effectiveTools[0] === AgentCapabilities.ocr)
   ) {
     return { toolDefinitions: [] };
   }
@@ -864,7 +945,7 @@ async function loadAgentTools({
   const actionsEnabled = checkCapability(AgentCapabilities.actions);
 
   let includesWebSearch = false;
-  const _agentTools = agent.tools?.filter((tool) => {
+  const _agentTools = effectiveTools.filter((tool) => {
     if (tool === Tools.file_search) {
       return checkCapability(AgentCapabilities.file_search);
     } else if (tool === Tools.execute_code) {
@@ -891,9 +972,9 @@ async function loadAgentTools({
 
   /** @type {Record<string, Record<string, string>>} */
   let userMCPAuthMap;
-  if (agent.tools?.some((t) => t.includes(Constants.mcp_delimiter))) {
+  if (effectiveTools.some((t) => t.includes(Constants.mcp_delimiter))) {
     userMCPAuthMap = await getUserMCPAuthMap({
-      tools: agent.tools,
+      tools: effectiveTools,
       userId: req.user.id,
       findPluginAuthsByKeys,
     });

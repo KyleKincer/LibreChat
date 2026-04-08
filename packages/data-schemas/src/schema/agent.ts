@@ -107,6 +107,11 @@ const agentSchema = new Schema<IAgent>(
       default: [],
       index: true,
     },
+    /** MCP servers users may opt into per conversation without making them mandatory agent tools */
+    availableMcpServers: {
+      type: [String],
+      default: undefined,
+    },
     /** Per-tool configuration (defer_loading, allowed_callers) */
     tool_options: {
       type: Schema.Types.Mixed,

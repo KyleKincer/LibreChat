@@ -53,6 +53,18 @@ export function extractMCPServers(agent: AgentWithTools): string[] {
   return Array.from(mcpServers);
 }
 
+function mergeMCPServers(agent: AgentWithTools, ephemeralAgent?: TEphemeralAgent): string[] {
+  const mcpServers = new Set<string>(extractMCPServers(agent));
+
+  for (const serverName of ephemeralAgent?.mcp ?? []) {
+    if (typeof serverName === 'string' && serverName !== '') {
+      mcpServers.add(serverName);
+    }
+  }
+
+  return Array.from(mcpServers);
+}
+
 /**
  * Fetches MCP instructions for the given server names.
  * @param {string[]} mcpServers - Array of MCP server names
@@ -118,7 +130,7 @@ export function buildAgentInstructions({
  * @param {Agent} params.agent - The agent to update
  * @param {string} params.sharedRunContext - Run-level shared context
  * @param {MCPManager} params.mcpManager - MCP manager instance
- * @param {Object} [params.ephemeralAgent] - Ephemeral agent config (for MCP override)
+ * @param {Object} [params.ephemeralAgent] - Ephemeral agent config (optional MCP selections)
  * @param {string} [params.agentId] - Agent ID for logging
  * @param {Logger} [params.logger] - Optional logger instance
  * @returns {Promise<void>}
@@ -143,7 +155,7 @@ export async function applyContextToAgent({
   const baseInstructions = agent.instructions || '';
 
   try {
-    const mcpServers = ephemeralAgent?.mcp?.length ? ephemeralAgent.mcp : extractMCPServers(agent);
+    const mcpServers = mergeMCPServers(agent, ephemeralAgent);
     const mcpInstructions = await getMCPInstructionsForServers(
       mcpServers,
       mcpManager,

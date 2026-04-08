@@ -356,6 +356,7 @@ const ChatForm = memo(function ChatForm({
                 }
                 isSubmitting={isSubmitting}
                 conversationId={conversationId}
+                agentId={conversation?.agent_id}
                 specName={conversation?.spec}
                 onChange={setBadges}
                 isInChat={

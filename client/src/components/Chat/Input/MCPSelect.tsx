@@ -11,7 +11,8 @@ import { useHasAccess } from '~/hooks';
 import { cn } from '~/utils';
 
 function MCPSelectContent() {
-  const { conversationId, storageContextKey, mcpServerManager } = useBadgeRowContext();
+  const { conversationId, storageContextKey, mcpServerManager, alwaysShowMCPSelect } =
+    useBadgeRowContext();
   const {
     localize,
     isPinned,
@@ -48,7 +49,11 @@ function MCPSelectContent() {
     return localize('com_ui_x_selected', { 0: selectedCount });
   }, [selectedCount, selectableServers, mcpValues, localize]);
 
-  if (!isPinned && mcpValues?.length === 0) {
+  if (!alwaysShowMCPSelect && !isPinned && mcpValues?.length === 0) {
+    return null;
+  }
+
+  if (alwaysShowMCPSelect && selectableServers.length === 0 && selectedCount === 0) {
     return null;
   }
 
@@ -127,13 +132,17 @@ function MCPSelectContent() {
 
 function MCPSelect() {
   const { mcpServerManager } = useBadgeRowContext();
-  const { selectableServers } = mcpServerManager;
+  const { selectableServers, mcpValues } = mcpServerManager;
   const canUseMcp = useHasAccess({
     permissionType: PermissionTypes.MCP_SERVERS,
     permission: Permissions.USE,
   });
 
-  if (!canUseMcp || !selectableServers || selectableServers.length === 0) {
+  if (!canUseMcp || !selectableServers) {
+    return null;
+  }
+
+  if (selectableServers.length === 0 && (mcpValues?.length ?? 0) === 0) {
     return null;
   }
 

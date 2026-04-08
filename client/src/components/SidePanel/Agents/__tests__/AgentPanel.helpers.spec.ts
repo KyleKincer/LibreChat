@@ -5,11 +5,14 @@ import { describe, it, expect, jest } from '@jest/globals';
 import { Constants, type Agent } from 'librechat-data-provider';
 import type { FieldNamesMarkedBoolean } from 'react-hook-form';
 import type { AgentForm } from '~/common';
-import {
+
+jest.mock('~/data-provider', () => ({}));
+
+const {
   composeAgentUpdatePayload,
   persistAvatarChanges,
   isAvatarUploadOnlyDirty,
-} from '../AgentPanel';
+} = require('../AgentPanel');
 
 const createForm = (): AgentForm => ({
   agent: undefined,
@@ -63,6 +66,15 @@ describe('composeAgentUpdatePayload', () => {
     const { payload } = composeAgentUpdatePayload(form, 'agent_123');
 
     expect(payload.avatar).toBeUndefined();
+  });
+
+  it('includes availableMcpServers when provided', () => {
+    const form = createForm();
+    form.availableMcpServers = ['confluence'];
+
+    const { payload } = composeAgentUpdatePayload(form, 'agent_123');
+
+    expect(payload.availableMcpServers).toEqual(['confluence']);
   });
 });
 

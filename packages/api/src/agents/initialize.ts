@@ -93,6 +93,7 @@ export interface InitializeAgentParams {
     agentId: string;
     tools: string[];
     model: string | null;
+    availableMcpServers?: string[];
     tool_options: AgentToolOptions | undefined;
     tool_resources: AgentToolResources | undefined;
   }) => Promise<{
@@ -310,6 +311,7 @@ export async function initializeAgent(
     agentId: agent.id,
     tools: agent.tools ?? [],
     model: agent.model,
+    availableMcpServers: agent.availableMcpServers,
     tool_options: agent.tool_options,
     tool_resources,
   })) ?? {

@@ -39,6 +39,8 @@ export interface IAgent extends Omit<Document, 'model'> {
   is_promoted?: boolean;
   /** MCP server names extracted from tools for efficient querying */
   mcpServerNames?: string[];
+  /** MCP servers users may opt into per conversation without making them mandatory agent tools */
+  availableMcpServers?: string[];
   /** Per-tool configuration (defer_loading, allowed_callers) */
   tool_options?: AgentToolOptions;
   tenantId?: string;

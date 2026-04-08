@@ -1,0 +1,16 @@
+include:
+  - project: it/devops/ci-templates
+    file:
+      - gitlab-deployment.yaml
+    ref: gl-deploy-v1
+
+stages:
+  - build
+
+build_librechat:
+  extends: .build_default_registry
+  variables:
+    CONTEXT: "$CI_PROJECT_DIR"
+    DOCKERFILE: "$CI_PROJECT_DIR/Dockerfile.multi"
+  rules:
+    - if: $CI_COMMIT_BRANCH

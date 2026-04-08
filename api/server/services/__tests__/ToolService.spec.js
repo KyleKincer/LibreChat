@@ -1,12 +1,22 @@
+const dataProvider = require('librechat-data-provider');
 const {
   Tools,
   Constants,
   EModelEndpoint,
-  isActionTool,
   actionDelimiter,
   AgentCapabilities,
   defaultAgentCapabilities,
-} = require('librechat-data-provider');
+} = dataProvider;
+const isActionTool =
+  dataProvider.isActionTool ??
+  ((toolName) => {
+    const actionIdx = toolName.indexOf(actionDelimiter);
+    if (actionIdx < 0) {
+      return false;
+    }
+    const mcpIdx = toolName.indexOf(Constants.mcp_delimiter);
+    return mcpIdx < 0 || mcpIdx < actionIdx;
+  });
 
 const mockGetEndpointsConfig = jest.fn();
 const mockGetMCPServerTools = jest.fn();
@@ -237,6 +247,115 @@ describe('ToolService - Action Capability Gating', () => {
       const [callArgs] = mockLoadToolDefinitions.mock.calls[0];
       expect(callArgs.tools).toContain(mcpToolWithAction);
       expect(callArgs.tools).toContain(regularTool);
+    });
+
+    it('should include selected allowlisted MCP servers from the agent configuration', async () => {
+      const capabilities = [AgentCapabilities.tools];
+      const req = createMockReq(capabilities);
+      req.body = {
+        agent_id: 'agent_123',
+        ephemeralAgent: {
+          mcp: ['confluence', 'github'],
+        },
+      };
+      mockGetEndpointsConfig.mockResolvedValue(createEndpointsConfig(capabilities));
+
+      await loadAgentTools({
+        req,
+        res: {},
+        agent: {
+          id: 'agent_123',
+          tools: [regularTool],
+          availableMcpServers: ['confluence'],
+        },
+        definitionsOnly: true,
+      });
+
+      expect(mockLoadToolDefinitions).toHaveBeenCalledTimes(1);
+      const [callArgs] = mockLoadToolDefinitions.mock.calls[0];
+      const confluenceTool = `${Constants.mcp_all}${Constants.mcp_delimiter}confluence`;
+      const githubTool = `${Constants.mcp_all}${Constants.mcp_delimiter}github`;
+
+      expect(callArgs.tools).toContain(regularTool);
+      expect(callArgs.tools).toContain(confluenceTool);
+      expect(callArgs.tools).not.toContain(githubTool);
+      expect(mockGetUserMCPAuthMap).toHaveBeenCalledWith({
+        tools: [regularTool, confluenceTool],
+        userId: 'user_123',
+        findPluginAuthsByKeys: expect.any(Function),
+      });
+    });
+
+    it('should fall back to the model spec allowlist when the agent has none', async () => {
+      const capabilities = [AgentCapabilities.tools];
+      const req = createMockReq(capabilities);
+      req.body = {
+        agent_id: 'agent_123',
+        spec: 'echo-agent',
+        ephemeralAgent: {
+          mcp: ['confluence'],
+        },
+      };
+      req.config.modelSpecs = {
+        list: [
+          {
+            name: 'echo-agent',
+            availableMcpServers: ['confluence'],
+          },
+        ],
+      };
+      mockGetEndpointsConfig.mockResolvedValue(createEndpointsConfig(capabilities));
+
+      await loadAgentTools({
+        req,
+        res: {},
+        agent: { id: 'agent_123', tools: [regularTool] },
+        definitionsOnly: true,
+      });
+
+      expect(mockLoadToolDefinitions).toHaveBeenCalledTimes(1);
+      const [callArgs] = mockLoadToolDefinitions.mock.calls[0];
+      const confluenceTool = `${Constants.mcp_all}${Constants.mcp_delimiter}confluence`;
+
+      expect(callArgs.tools).toEqual([regularTool, confluenceTool]);
+      expect(mockGetUserMCPAuthMap).toHaveBeenCalledWith({
+        tools: [regularTool, confluenceTool],
+        userId: 'user_123',
+        findPluginAuthsByKeys: expect.any(Function),
+      });
+    });
+
+    it('should ignore selected MCP servers when neither the agent nor the spec defines an allowlist', async () => {
+      const capabilities = [AgentCapabilities.tools];
+      const req = createMockReq(capabilities);
+      req.body = {
+        agent_id: 'agent_123',
+        spec: 'echo-agent',
+        ephemeralAgent: {
+          mcp: ['confluence'],
+        },
+      };
+      req.config.modelSpecs = {
+        list: [
+          {
+            name: 'echo-agent',
+          },
+        ],
+      };
+      mockGetEndpointsConfig.mockResolvedValue(createEndpointsConfig(capabilities));
+
+      await loadAgentTools({
+        req,
+        res: {},
+        agent: { id: 'agent_123', tools: [regularTool] },
+        definitionsOnly: true,
+      });
+
+      expect(mockLoadToolDefinitions).toHaveBeenCalledTimes(1);
+      const [callArgs] = mockLoadToolDefinitions.mock.calls[0];
+
+      expect(callArgs.tools).toEqual([regularTool]);
+      expect(mockGetUserMCPAuthMap).not.toHaveBeenCalled();
     });
 
     it('should return actionsEnabled in the result', async () => {

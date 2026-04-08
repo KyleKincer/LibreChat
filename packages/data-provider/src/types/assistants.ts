@@ -270,6 +270,8 @@ export type Agent = {
   version?: number;
   category?: string;
   support_contact?: SupportContact;
+  /** MCP servers users may opt into per conversation without making them mandatory agent tools */
+  availableMcpServers?: string[];
   /** Per-tool configuration options (deferred loading, allowed callers, etc.) */
   tool_options?: AgentToolOptions;
 };
@@ -296,6 +298,7 @@ export type AgentCreateParams = {
   | 'recursion_limit'
   | 'category'
   | 'support_contact'
+  | 'availableMcpServers'
   | 'tool_options'
 >;
 
@@ -320,6 +323,7 @@ export type AgentUpdateParams = {
   | 'recursion_limit'
   | 'category'
   | 'support_contact'
+  | 'availableMcpServers'
   | 'tool_options'
 >;
 

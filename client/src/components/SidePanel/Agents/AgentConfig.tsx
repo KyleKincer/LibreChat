@@ -29,6 +29,7 @@ import Artifacts from './Artifacts';
 import AgentTool from './AgentTool';
 import CodeForm from './Code/Form';
 import MCPTools from './MCPTools';
+import OptionalMCPServers from './OptionalMCPServers';
 
 const labelClass = 'mb-2 text-token-text-primary block text-sm font-medium';
 const inputClass = cn(
@@ -313,6 +314,7 @@ export default function AgentConfig() {
             setShowMCPToolDialog={setShowMCPToolDialog}
           />
         )}
+        <OptionalMCPServers />
 
         {/* Agent Tools & Actions */}
         <div className="mb-4">

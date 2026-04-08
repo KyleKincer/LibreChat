@@ -9,7 +9,8 @@ import {
   useCodeApiKeyForm,
   useToolToggle,
 } from '~/hooks';
-import { getTimestampedValue } from '~/utils/timestamps';
+import { useAgentsMapContext } from './AgentsMapContext';
+import { getModelSpec, getTimestampedValue } from '~/utils';
 import { useGetStartupConfig } from '~/data-provider';
 import { ephemeralAgentByConvoId } from '~/store';
 
@@ -24,6 +25,7 @@ interface BadgeRowContextType {
   codeApiKeyForm: ReturnType<typeof useCodeApiKeyForm>;
   searchApiKeyForm: ReturnType<typeof useSearchApiKeyForm>;
   mcpServerManager: ReturnType<typeof useMCPServerManager>;
+  alwaysShowMCPSelect: boolean;
 }
 
 const BadgeRowContext = createContext<BadgeRowContextType | undefined>(undefined);
@@ -40,6 +42,7 @@ interface BadgeRowProviderProps {
   children: React.ReactNode;
   isSubmitting?: boolean;
   conversationId?: string | null;
+  agentId?: string | null;
   specName?: string | null;
 }
 
@@ -47,14 +50,33 @@ export default function BadgeRowProvider({
   children,
   isSubmitting,
   conversationId,
+  agentId,
   specName,
 }: BadgeRowProviderProps) {
   const lastContextKeyRef = useRef<string>('');
   const hasInitializedRef = useRef(false);
+  const agentsMap = useAgentsMapContext();
   const { agentsConfig } = useGetAgentsConfig();
   const { data: startupConfig } = useGetStartupConfig();
   const key = conversationId ?? Constants.NEW_CONVO;
   const hasModelSpecs = (startupConfig?.modelSpecs?.list?.length ?? 0) > 0;
+  const activeModelSpec = useMemo(
+    () =>
+      getModelSpec({
+        specName,
+        startupConfig,
+      }),
+    [specName, startupConfig],
+  );
+  const activeAgent = useMemo(
+    () => (agentId != null && agentId !== '' ? agentsMap?.[agentId] : undefined),
+    [agentsMap, agentId],
+  );
+  const agentAvailableMcpServers = Array.isArray(activeAgent?.availableMcpServers)
+    ? activeAgent.availableMcpServers
+    : undefined;
+  const availableMcpServers = agentAvailableMcpServers ?? activeModelSpec?.availableMcpServers;
+  const alwaysShowMCPSelect = Array.isArray(availableMcpServers) && availableMcpServers.length > 0;
 
   /**
    * Compute the storage context key for non-spec persistence:
@@ -242,7 +264,11 @@ export default function BadgeRowProvider({
     isAuthenticated: true,
   });
 
-  const mcpServerManager = useMCPServerManager({ conversationId, storageContextKey });
+  const mcpServerManager = useMCPServerManager({
+    conversationId,
+    storageContextKey,
+    allowedServerNames: availableMcpServers,
+  });
 
   const value: BadgeRowContextType = {
     webSearch,
@@ -255,6 +281,7 @@ export default function BadgeRowProvider({
     codeInterpreter,
     searchApiKeyForm,
     mcpServerManager,
+    alwaysShowMCPSelect,
   };
 
   return <BadgeRowContext.Provider value={value}>{children}</BadgeRowContext.Provider>;

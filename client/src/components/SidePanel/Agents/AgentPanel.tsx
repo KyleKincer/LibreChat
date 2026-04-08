@@ -74,6 +74,7 @@ export function composeAgentUpdatePayload(data: AgentForm, agent_id?: string | n
     recursion_limit,
     category,
     support_contact,
+    availableMcpServers,
     tool_options,
     avatar_action: avatarActionState,
   } = data;
@@ -100,6 +101,7 @@ export function composeAgentUpdatePayload(data: AgentForm, agent_id?: string | n
       recursion_limit,
       category,
       support_contact,
+      availableMcpServers,
       tool_options,
       ...(shouldResetAvatar ? { avatar: null } : {}),
     },
