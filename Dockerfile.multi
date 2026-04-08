@@ -8,6 +8,7 @@ ARG NODE_MAX_OLD_SPACE_SIZE=6144
 FROM node:20-alpine AS base-min
 RUN apk upgrade --no-cache
 RUN apk add --no-cache jemalloc
+RUN npm install -g npm@11.10.0
 # Set environment variable to use jemalloc
 ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
 
