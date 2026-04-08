@@ -82,6 +82,7 @@ COPY --from=data-provider-build /app/packages/data-provider/dist ./packages/data
 COPY --from=data-schemas-build /app/packages/data-schemas/dist ./packages/data-schemas/dist
 COPY --from=api-package-build /app/packages/api/dist ./packages/api/dist
 COPY --from=client-build /app/client/dist ./client/dist
+RUN mkdir -p /app/api/logs && chown -R 1000:2000 /app/api/logs
 WORKDIR /app/api
 EXPOSE 3080
 ENV HOST=0.0.0.0
