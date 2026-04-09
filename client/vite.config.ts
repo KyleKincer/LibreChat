@@ -83,7 +83,8 @@ export default defineConfig(({ command }) => ({
           'manifest.webmanifest',
         ],
         globIgnores: ['images/**/*', '**/*.map', 'index.html'],
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // MCP-related client chunks can exceed the older 4 MiB cap after minification.
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/oauth/, /^\/api/],
       },
       includeAssets: [],
@@ -213,6 +214,13 @@ export default defineConfig(({ command }) => ({
               normalizedId.includes('rehype-')
             ) {
               return 'markdown-processing';
+            }
+            if (
+              normalizedId.includes('@modelcontextprotocol/ext-apps') ||
+              normalizedId.includes('@modelcontextprotocol/sdk') ||
+              normalizedId.includes('@mcp-ui/client')
+            ) {
+              return 'mcp-apps';
             }
             if (normalizedId.includes('monaco-editor') || normalizedId.includes('@monaco-editor')) {
               return 'code-editor';
