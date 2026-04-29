@@ -52,6 +52,10 @@ const router = Router();
 
 const OAUTH_CSRF_COOKIE_PATH = '/api/mcp';
 
+const getMCPOAuthErrorUrl = (basePath, error) => {
+  return `${basePath}/mcp/oauth/error?error=${encodeURIComponent(String(error))}`;
+};
+
 const checkMCPUsePermissions = generateCheckAccess({
   permissionType: PermissionTypes.MCP_SERVERS,
   permissions: [Permissions.USE],
@@ -149,19 +153,38 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
 
     if (oauthError) {
       logger.error('[MCP OAuth] OAuth error received', { error: oauthError });
-      return res.redirect(
-        `${basePath}/oauth/error?error=${encodeURIComponent(String(oauthError))}`,
-      );
+      if (state && typeof state === 'string') {
+        try {
+          const flowsCache = getLogStores(CacheKeys.FLOWS);
+          const flowManager = getFlowStateManager(flowsCache);
+          const flowId = await MCPOAuthHandler.resolveStateToFlowId(state, flowManager);
+          if (flowId) {
+            const [flowUserId] = flowId.split(':');
+            const hasCsrf = validateOAuthCsrf(req, res, flowId, OAUTH_CSRF_COOKIE_PATH);
+            const hasSession = !hasCsrf && validateOAuthSession(req, flowUserId);
+            if (hasCsrf || hasSession) {
+              await flowManager.failFlow(flowId, 'mcp_oauth', String(oauthError));
+              logger.debug('[MCP OAuth] Marked flow as FAILED with OAuth error', {
+                flowId,
+                error: oauthError,
+              });
+            }
+          }
+        } catch (error) {
+          logger.debug('[MCP OAuth] Could not mark flow as failed', error);
+        }
+      }
+      return res.redirect(getMCPOAuthErrorUrl(basePath, oauthError));
     }
 
     if (!code || typeof code !== 'string') {
       logger.error('[MCP OAuth] Missing or invalid code');
-      return res.redirect(`${basePath}/oauth/error?error=missing_code`);
+      return res.redirect(getMCPOAuthErrorUrl(basePath, 'missing_code'));
     }
 
     if (!state || typeof state !== 'string') {
       logger.error('[MCP OAuth] Missing or invalid state');
-      return res.redirect(`${basePath}/oauth/error?error=missing_state`);
+      return res.redirect(getMCPOAuthErrorUrl(basePath, 'missing_state'));
     }
 
     const flowsCache = getLogStores(CacheKeys.FLOWS);
@@ -170,14 +193,14 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
     const flowId = await MCPOAuthHandler.resolveStateToFlowId(state, flowManager);
     if (!flowId) {
       logger.error('[MCP OAuth] Could not resolve state to flow ID', { state });
-      return res.redirect(`${basePath}/oauth/error?error=invalid_state`);
+      return res.redirect(getMCPOAuthErrorUrl(basePath, 'invalid_state'));
     }
     logger.debug('[MCP OAuth] Resolved flow ID from state', { flowId });
 
     const flowParts = flowId.split(':');
     if (flowParts.length < 2 || !flowParts[0] || !flowParts[1]) {
       logger.error('[MCP OAuth] Invalid flow ID format', { flowId });
-      return res.redirect(`${basePath}/oauth/error?error=invalid_state`);
+      return res.redirect(getMCPOAuthErrorUrl(basePath, 'invalid_state'));
     }
 
     const [flowUserId] = flowParts;
@@ -208,7 +231,7 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
           hasSessionCookie: !!req.cookies?.[OAUTH_SESSION_COOKIE],
         },
       );
-      return res.redirect(`${basePath}/oauth/error?error=csrf_validation_failed`);
+      return res.redirect(getMCPOAuthErrorUrl(basePath, 'csrf_validation_failed'));
     }
 
     logger.debug('[MCP OAuth] Getting flow state for flowId: ' + flowId);
@@ -216,7 +239,7 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
 
     if (!flowState) {
       logger.error('[MCP OAuth] Flow state not found for flowId:', flowId);
-      return res.redirect(`${basePath}/oauth/error?error=invalid_state`);
+      return res.redirect(getMCPOAuthErrorUrl(basePath, 'invalid_state'));
     }
 
     logger.debug('[MCP OAuth] Flow state details', {
@@ -345,7 +368,7 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
     res.redirect(redirectUrl);
   } catch (error) {
     logger.error('[MCP OAuth] OAuth callback error', error);
-    res.redirect(`${basePath}/oauth/error?error=callback_failed`);
+    res.redirect(getMCPOAuthErrorUrl(basePath, 'callback_failed'));
   }
 });
 

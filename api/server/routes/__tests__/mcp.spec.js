@@ -308,7 +308,7 @@ describe('MCP Routes', () => {
       const basePath = getBasePath();
 
       expect(response.status).toBe(302);
-      expect(response.headers.location).toBe(`${basePath}/oauth/error?error=access_denied`);
+      expect(response.headers.location).toBe(`${basePath}/mcp/oauth/error?error=access_denied`);
     });
 
     it('should redirect to error page when code is missing', async () => {
@@ -318,7 +318,7 @@ describe('MCP Routes', () => {
       const basePath = getBasePath();
 
       expect(response.status).toBe(302);
-      expect(response.headers.location).toBe(`${basePath}/oauth/error?error=missing_code`);
+      expect(response.headers.location).toBe(`${basePath}/mcp/oauth/error?error=missing_code`);
     });
 
     it('should redirect to error page when state is missing', async () => {
@@ -328,7 +328,7 @@ describe('MCP Routes', () => {
       const basePath = getBasePath();
 
       expect(response.status).toBe(302);
-      expect(response.headers.location).toBe(`${basePath}/oauth/error?error=missing_state`);
+      expect(response.headers.location).toBe(`${basePath}/mcp/oauth/error?error=missing_state`);
     });
 
     it('should redirect to error page when CSRF cookie is missing', async () => {
@@ -340,7 +340,7 @@ describe('MCP Routes', () => {
 
       expect(response.status).toBe(302);
       expect(response.headers.location).toBe(
-        `${basePath}/oauth/error?error=csrf_validation_failed`,
+        `${basePath}/mcp/oauth/error?error=csrf_validation_failed`,
       );
     });
 
@@ -357,7 +357,7 @@ describe('MCP Routes', () => {
 
       expect(response.status).toBe(302);
       expect(response.headers.location).toBe(
-        `${basePath}/oauth/error?error=csrf_validation_failed`,
+        `${basePath}/mcp/oauth/error?error=csrf_validation_failed`,
       );
     });
 
@@ -376,7 +376,7 @@ describe('MCP Routes', () => {
       const basePath = getBasePath();
 
       expect(response.status).toBe(302);
-      expect(response.headers.location).toBe(`${basePath}/oauth/error?error=invalid_state`);
+      expect(response.headers.location).toBe(`${basePath}/mcp/oauth/error?error=invalid_state`);
     });
 
     describe('CSRF fallback via active PENDING flow', () => {
@@ -443,7 +443,7 @@ describe('MCP Routes', () => {
         const basePath = getBasePath();
         expect(response.status).toBe(302);
         expect(response.headers.location).toBe(
-          `${basePath}/oauth/error?error=csrf_validation_failed`,
+          `${basePath}/mcp/oauth/error?error=csrf_validation_failed`,
         );
       });
 
@@ -466,7 +466,7 @@ describe('MCP Routes', () => {
         const basePath = getBasePath();
         expect(response.status).toBe(302);
         expect(response.headers.location).toBe(
-          `${basePath}/oauth/error?error=csrf_validation_failed`,
+          `${basePath}/mcp/oauth/error?error=csrf_validation_failed`,
         );
       });
 
@@ -489,7 +489,7 @@ describe('MCP Routes', () => {
         const basePath = getBasePath();
         expect(response.status).toBe(302);
         expect(response.headers.location).toBe(
-          `${basePath}/oauth/error?error=csrf_validation_failed`,
+          `${basePath}/mcp/oauth/error?error=csrf_validation_failed`,
         );
       });
     });
@@ -706,7 +706,7 @@ describe('MCP Routes', () => {
       const basePath = getBasePath();
 
       expect(response.status).toBe(302);
-      expect(response.headers.location).toBe(`${basePath}/oauth/error?error=callback_failed`);
+      expect(response.headers.location).toBe(`${basePath}/mcp/oauth/error?error=callback_failed`);
     });
 
     it('should handle system-level OAuth completion', async () => {
@@ -848,7 +848,7 @@ describe('MCP Routes', () => {
       const basePath = getBasePath();
 
       expect(response.status).toBe(302);
-      expect(response.headers.location).toBe(`${basePath}/oauth/error?error=callback_failed`);
+      expect(response.headers.location).toBe(`${basePath}/mcp/oauth/error?error=callback_failed`);
       expect(mockMcpManager.getUserConnection).not.toHaveBeenCalled();
     });
 

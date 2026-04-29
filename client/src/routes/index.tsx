@@ -53,6 +53,16 @@ export const router = createBrowserRouter(
       ],
     },
     {
+      path: 'mcp/oauth',
+      errorElement: <RouteErrorBoundary />,
+      children: [
+        {
+          path: 'error',
+          element: <OAuthError />,
+        },
+      ],
+    },
+    {
       path: '/',
       element: <StartupLayout />,
       errorElement: <RouteErrorBoundary />,
