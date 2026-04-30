@@ -13,6 +13,7 @@ const {
   MCPOAuthHandler,
   MCPTokenStorage,
   MCPOAuthClaimsChallengeError,
+  MCPOAuthAuthorizationRetryError,
   setOAuthSession,
   PENDING_STALE_MS,
   getUserMCPAuthMap,
@@ -370,6 +371,13 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
   } catch (error) {
     if (error instanceof MCPOAuthClaimsChallengeError) {
       logger.info('[MCP OAuth] Redirecting to satisfy OAuth claims challenge');
+      return res.redirect(error.authorizationUrl);
+    }
+
+    if (error instanceof MCPOAuthAuthorizationRetryError) {
+      logger.info('[MCP OAuth] Redirecting to satisfy OAuth interaction requirement', {
+        reason: error.reason,
+      });
       return res.redirect(error.authorizationUrl);
     }
 

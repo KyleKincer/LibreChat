@@ -99,6 +99,10 @@ export interface MCPOAuthFlowMetadata extends FlowMetadata {
   claimsChallengeError?: string;
   /** Timestamp for the last claims-challenge authorization retry. */
   claimsChallengeAt?: number;
+  /** Last interaction-required token exchange error that caused an authorization retry. */
+  interactionRequiredError?: string;
+  /** Timestamp for the last interaction-required authorization retry. */
+  interactionRequiredAt?: number;
 }
 
 export interface MCPOAuthTokens extends OAuthTokens {

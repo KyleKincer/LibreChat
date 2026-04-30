@@ -50,9 +50,26 @@ export class MCPOAuthClaimsChallengeError extends Error {
   }
 }
 
+export class MCPOAuthAuthorizationRetryError extends Error {
+  constructor(
+    public readonly authorizationUrl: string,
+    public readonly reason: string,
+  ) {
+    super('OAuth authorization retry required');
+    this.name = 'MCPOAuthAuthorizationRetryError';
+  }
+}
+
 export class MCPOAuthHandler {
   private static readonly FLOW_TYPE = 'mcp_oauth';
   private static readonly FLOW_TTL = 10 * 60 * 1000; // 10 minutes
+  private static readonly INTERACTION_REQUIRED_PROMPT = 'login';
+  private static readonly INTERACTION_REQUIRED_CODES = new Set([
+    'AADSTS50074',
+    'AADSTS50076',
+    'AADSTS50078',
+    'AADSTS50079',
+  ]);
 
   /**
    * Creates a fetch function with custom headers injected
@@ -782,6 +799,20 @@ export class MCPOAuthHandler {
         throw challengeError;
       }
 
+      const interactionRetryError = await this.createInteractionRequiredRetry(
+        flowId,
+        flowManager,
+        error,
+        tokenErrorResponse,
+      );
+      if (interactionRetryError) {
+        logger.info('[MCPOAuth] OAuth interaction required, redirecting for retry', {
+          flowId,
+          reason: interactionRetryError.reason,
+        });
+        throw interactionRetryError;
+      }
+
       logger.error('[MCPOAuth] Failed to complete OAuth flow', { error, flowId });
       await flowManager.failFlow(flowId, this.FLOW_TYPE, error as Error);
       throw error;
@@ -844,6 +875,89 @@ export class MCPOAuthHandler {
     await this.storeStateMapping(flowMetadata.state, flowId, flowManager);
 
     return new MCPOAuthClaimsChallengeError(authResult.authorizationUrl.toString(), claims);
+  }
+
+  private static async createInteractionRequiredRetry(
+    flowId: string,
+    flowManager: FlowStateManager<MCPOAuthTokens>,
+    error: unknown,
+    tokenErrorResponse?: TokenErrorResponse,
+  ): Promise<MCPOAuthAuthorizationRetryError | null> {
+    const reason = this.getInteractionRequiredReason(error, tokenErrorResponse);
+    if (!reason) {
+      return null;
+    }
+
+    const flowState = await flowManager.getFlowState(flowId, this.FLOW_TYPE);
+    if (!flowState) {
+      return null;
+    }
+
+    const flowMetadata = flowState.metadata as MCPOAuthFlowMetadata;
+    if (flowMetadata.interactionRequiredAt || !flowMetadata.metadata || !flowMetadata.clientInfo) {
+      return null;
+    }
+
+    let resource: URL | undefined;
+    try {
+      resource = flowMetadata.resourceMetadata?.resource
+        ? new URL(flowMetadata.resourceMetadata.resource)
+        : undefined;
+    } catch {
+      resource = undefined;
+    }
+
+    const authResult = await startAuthorization(flowMetadata.serverUrl, {
+      metadata: flowMetadata.metadata as unknown as SDKOAuthMetadata,
+      clientInformation: flowMetadata.clientInfo,
+      redirectUrl: flowMetadata.clientInfo.redirect_uris?.[0] || this.getDefaultRedirectUri(),
+      scope:
+        flowMetadata.scope ||
+        flowMetadata.resourceMetadata?.scopes_supported?.join(' ') ||
+        flowMetadata.metadata.scopes_supported?.join(' '),
+      resource,
+    });
+
+    authResult.authorizationUrl.searchParams.set('state', flowMetadata.state);
+    authResult.authorizationUrl.searchParams.set('prompt', this.INTERACTION_REQUIRED_PROMPT);
+
+    const retryMetadata: MCPOAuthFlowMetadata = {
+      ...flowMetadata,
+      codeVerifier: authResult.codeVerifier,
+      authorizationUrl: authResult.authorizationUrl.toString(),
+      interactionRequiredError: error instanceof Error ? error.message : String(error),
+      interactionRequiredAt: Date.now(),
+    };
+
+    await flowManager.initFlow(flowId, this.FLOW_TYPE, retryMetadata);
+    await this.storeStateMapping(flowMetadata.state, flowId, flowManager);
+
+    return new MCPOAuthAuthorizationRetryError(authResult.authorizationUrl.toString(), reason);
+  }
+
+  private static getInteractionRequiredReason(
+    error: unknown,
+    tokenErrorResponse?: TokenErrorResponse,
+  ): string | null {
+    const description = [
+      tokenErrorResponse?.error,
+      tokenErrorResponse?.error_description,
+      error instanceof Error ? error.message : undefined,
+    ]
+      .filter((value): value is string => !!value)
+      .join(' ');
+
+    if (!description) {
+      return null;
+    }
+
+    for (const code of this.INTERACTION_REQUIRED_CODES) {
+      if (description.includes(code)) {
+        return code;
+      }
+    }
+
+    return null;
   }
 
   /**
