@@ -1,7 +1,12 @@
 import { TokenExchangeMethodEnum } from 'librechat-data-provider';
 import type { MCPOptions } from 'librechat-data-provider';
 import type { AuthorizationServerMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { MCPOAuthFlowMetadata, MCPOAuthHandler, MCPOAuthTokens } from '~/mcp/oauth';
+import {
+  MCPOAuthHandler,
+  MCPOAuthTokens,
+  MCPOAuthFlowMetadata,
+  MCPOAuthClaimsChallengeError,
+} from '~/mcp/oauth';
 
 jest.mock('@librechat/data-schemas', () => ({
   logger: {
@@ -1285,6 +1290,92 @@ describe('MCPOAuthHandler - Configurable OAuth Metadata', () => {
 
       const sentHeaders = callArgs[1]?.headers as Headers;
       expect(sentHeaders.has('Authorization')).toBe(false);
+    });
+
+    it('should restart authorization with claims when token exchange returns a claims challenge', async () => {
+      const claims = '{"access_token":{"polids":{"essential":true,"Values":["policy-id"]}}}';
+      const flowMetadata: MCPOAuthFlowMetadata = {
+        serverName: 'test-server',
+        userId: 'user-123',
+        serverUrl: 'https://example.com/mcp',
+        state: 'opaque-state',
+        codeVerifier: 'old-verifier',
+        scope: 'User.Read offline_access',
+        clientInfo: {
+          client_id: 'test-client-id',
+          redirect_uris: ['http://localhost:3080/api/mcp/test-server/oauth/callback'],
+          token_endpoint_auth_method: 'none',
+        },
+        metadata: {
+          issuer: 'https://example.com',
+          authorization_endpoint: 'https://example.com/authorize',
+          token_endpoint: 'https://example.com/token',
+          response_types_supported: ['code'],
+          token_endpoint_auth_methods_supported: ['none'],
+        },
+      };
+      const mockFlowManager = {
+        getFlowState: jest.fn().mockResolvedValue({
+          status: 'PENDING',
+          metadata: flowMetadata,
+        }),
+        completeFlow: jest.fn(),
+        failFlow: jest.fn(),
+        initFlow: jest.fn(),
+      } as unknown as FlowStateManager<MCPOAuthTokens>;
+
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'interaction_required',
+            error_description: 'AADSTS50076: MFA required.',
+            claims,
+          }),
+          { status: 400 },
+        ),
+      );
+      mockStartAuthorization.mockResolvedValueOnce({
+        authorizationUrl: new URL('https://example.com/authorize?client_id=test-client-id'),
+        codeVerifier: 'new-verifier',
+      });
+      mockExchangeAuthorization.mockImplementation(async (_, options) => {
+        const body = new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: 'test-auth-code',
+        });
+        await options.fetchFn?.('https://example.com/token', {
+          method: 'POST',
+          body,
+        });
+        throw new Error('AADSTS50076: MFA required.');
+      });
+
+      const error = await MCPOAuthHandler.completeOAuthFlow(
+        'test-flow',
+        'test-auth-code',
+        mockFlowManager,
+        {},
+      ).catch((err: MCPOAuthClaimsChallengeError) => err);
+
+      expect(error).toMatchObject({
+        name: 'MCPOAuthClaimsChallengeError',
+        claims,
+      });
+      const retryUrl = new URL(error.authorizationUrl);
+      expect(retryUrl.searchParams.get('claims')).toBe(claims);
+      expect(retryUrl.searchParams.get('state')).toBe('opaque-state');
+      expect(mockFlowManager.initFlow).toHaveBeenCalledWith(
+        'test-flow',
+        'mcp_oauth',
+        expect.objectContaining({
+          codeVerifier: 'new-verifier',
+          authorizationUrl: expect.stringContaining('claims='),
+        }),
+      );
+      expect(mockFlowManager.initFlow).toHaveBeenCalledWith('opaque-state', 'mcp_oauth_state', {
+        flowId: 'test-flow',
+      });
+      expect(mockFlowManager.failFlow).not.toHaveBeenCalled();
     });
   });
 

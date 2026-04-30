@@ -31,6 +31,24 @@ import { sanitizeUrlForLogging } from '~/mcp/utils';
 
 /** Type for the OAuth metadata from the SDK */
 type SDKOAuthMetadata = Parameters<typeof registerClient>[1]['metadata'];
+type TokenErrorResponse = {
+  error?: string;
+  error_description?: string;
+  error_uri?: string;
+  claims?: string;
+};
+
+type TokenErrorCapture = (errorResponse: TokenErrorResponse) => void;
+
+export class MCPOAuthClaimsChallengeError extends Error {
+  constructor(
+    public readonly authorizationUrl: string,
+    public readonly claims: string,
+  ) {
+    super('OAuth claims challenge required');
+    this.name = 'MCPOAuthClaimsChallengeError';
+  }
+}
 
 export class MCPOAuthHandler {
   private static readonly FLOW_TYPE = 'mcp_oauth';
@@ -42,6 +60,7 @@ export class MCPOAuthHandler {
   private static createOAuthFetch(
     headers: Record<string, string>,
     clientInfo?: OAuthClientInformation,
+    onTokenError?: TokenErrorCapture,
   ): FetchLike {
     return async (url: string | URL, init?: RequestInit): Promise<Response> => {
       const newHeaders = new Headers(init?.headers ?? {});
@@ -106,17 +125,41 @@ export class MCPOAuthHandler {
           }
         }
 
-        return fetch(url, {
+        const response = await fetch(url, {
           ...init,
           body: params.toString(),
           headers: newHeaders,
         });
+        await this.captureTokenError(response, onTokenError);
+        return response;
       }
-      return fetch(url, {
+      const response = await fetch(url, {
         ...init,
         headers: newHeaders,
       });
+      if (method === 'POST' && params?.has('grant_type')) {
+        await this.captureTokenError(response, onTokenError);
+      }
+      return response;
     };
+  }
+
+  private static async captureTokenError(
+    response: Response | undefined,
+    onTokenError?: TokenErrorCapture,
+  ): Promise<void> {
+    if (!onTokenError || !response || response.ok) {
+      return;
+    }
+
+    try {
+      const body = (await response.clone().json()) as TokenErrorResponse;
+      if (typeof body === 'object' && body !== null) {
+        onTokenError(body);
+      }
+    } catch {
+      return;
+    }
   }
 
   /**
@@ -621,6 +664,7 @@ export class MCPOAuthHandler {
         clientInfo,
         metadata,
         resourceMetadata,
+        ...(scope && { scope }),
         ...(Object.keys(oauthHeaders).length > 0 && { oauthHeaders }),
         ...(reusedStoredClient && { reusedStoredClient }),
       };
@@ -659,6 +703,8 @@ export class MCPOAuthHandler {
     flowManager: FlowStateManager<MCPOAuthTokens>,
     oauthHeaders: Record<string, string>,
   ): Promise<MCPOAuthTokens> {
+    let tokenErrorResponse: TokenErrorResponse | undefined;
+
     try {
       /** Flow state which contains our metadata */
       const flowState = await flowManager.getFlowState(flowId, this.FLOW_TYPE);
@@ -697,7 +743,9 @@ export class MCPOAuthHandler {
         codeVerifier: metadata.codeVerifier,
         authorizationCode,
         resource,
-        fetchFn: this.createOAuthFetch(oauthHeaders, metadata.clientInfo),
+        fetchFn: this.createOAuthFetch(oauthHeaders, metadata.clientInfo, (errorResponse) => {
+          tokenErrorResponse = errorResponse;
+        }),
       });
 
       logger.debug('[MCPOAuth] Token exchange successful', {
@@ -720,10 +768,82 @@ export class MCPOAuthHandler {
 
       return mcpTokens;
     } catch (error) {
+      const challengeError = await this.createClaimsChallengeRetry(
+        flowId,
+        flowManager,
+        error,
+        tokenErrorResponse,
+      );
+      if (challengeError) {
+        logger.info('[MCPOAuth] OAuth claims challenge received, redirecting for retry', {
+          flowId,
+          hasClaims: true,
+        });
+        throw challengeError;
+      }
+
       logger.error('[MCPOAuth] Failed to complete OAuth flow', { error, flowId });
       await flowManager.failFlow(flowId, this.FLOW_TYPE, error as Error);
       throw error;
     }
+  }
+
+  private static async createClaimsChallengeRetry(
+    flowId: string,
+    flowManager: FlowStateManager<MCPOAuthTokens>,
+    error: unknown,
+    tokenErrorResponse?: TokenErrorResponse,
+  ): Promise<MCPOAuthClaimsChallengeError | null> {
+    const claims = tokenErrorResponse?.claims;
+    if (!claims) {
+      return null;
+    }
+
+    const flowState = await flowManager.getFlowState(flowId, this.FLOW_TYPE);
+    if (!flowState) {
+      return null;
+    }
+
+    const flowMetadata = flowState.metadata as MCPOAuthFlowMetadata;
+    if (!flowMetadata.metadata || !flowMetadata.clientInfo) {
+      return null;
+    }
+
+    let resource: URL | undefined;
+    try {
+      resource = flowMetadata.resourceMetadata?.resource
+        ? new URL(flowMetadata.resourceMetadata.resource)
+        : undefined;
+    } catch {
+      resource = undefined;
+    }
+
+    const authResult = await startAuthorization(flowMetadata.serverUrl, {
+      metadata: flowMetadata.metadata as unknown as SDKOAuthMetadata,
+      clientInformation: flowMetadata.clientInfo,
+      redirectUrl: flowMetadata.clientInfo.redirect_uris?.[0] || this.getDefaultRedirectUri(),
+      scope:
+        flowMetadata.scope ||
+        flowMetadata.resourceMetadata?.scopes_supported?.join(' ') ||
+        flowMetadata.metadata.scopes_supported?.join(' '),
+      resource,
+    });
+
+    authResult.authorizationUrl.searchParams.set('state', flowMetadata.state);
+    authResult.authorizationUrl.searchParams.set('claims', claims);
+
+    const retryMetadata: MCPOAuthFlowMetadata = {
+      ...flowMetadata,
+      codeVerifier: authResult.codeVerifier,
+      authorizationUrl: authResult.authorizationUrl.toString(),
+      claimsChallengeError: error instanceof Error ? error.message : String(error),
+      claimsChallengeAt: Date.now(),
+    };
+
+    await flowManager.initFlow(flowId, this.FLOW_TYPE, retryMetadata);
+    await this.storeStateMapping(flowMetadata.state, flowId, flowManager);
+
+    return new MCPOAuthClaimsChallengeError(authResult.authorizationUrl.toString(), claims);
   }
 
   /**

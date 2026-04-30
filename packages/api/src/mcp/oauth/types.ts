@@ -88,11 +88,17 @@ export interface MCPOAuthFlowMetadata extends FlowMetadata {
   clientInfo?: OAuthClientInformation;
   metadata?: OAuthMetadata;
   resourceMetadata?: OAuthProtectedResourceMetadata;
+  /** Requested OAuth scope for authorization retries. */
+  scope?: string;
   authorizationUrl?: string;
   /** Custom headers for OAuth token exchange, persisted at flow initiation for the callback. */
   oauthHeaders?: Record<string, string>;
   /** True when the flow reused a stored client registration from a prior successful OAuth flow */
   reusedStoredClient?: boolean;
+  /** Last claims-challenge token exchange error that caused an authorization retry. */
+  claimsChallengeError?: string;
+  /** Timestamp for the last claims-challenge authorization retry. */
+  claimsChallengeAt?: number;
 }
 
 export interface MCPOAuthTokens extends OAuthTokens {

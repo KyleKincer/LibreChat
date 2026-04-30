@@ -12,6 +12,7 @@ const {
   createSafeUser,
   MCPOAuthHandler,
   MCPTokenStorage,
+  MCPOAuthClaimsChallengeError,
   setOAuthSession,
   PENDING_STALE_MS,
   getUserMCPAuthMap,
@@ -367,6 +368,11 @@ router.get('/:serverName/oauth/callback', async (req, res) => {
     const redirectUrl = `${basePath}/oauth/success?serverName=${encodeURIComponent(serverName)}`;
     res.redirect(redirectUrl);
   } catch (error) {
+    if (error instanceof MCPOAuthClaimsChallengeError) {
+      logger.info('[MCP OAuth] Redirecting to satisfy OAuth claims challenge');
+      return res.redirect(error.authorizationUrl);
+    }
+
     logger.error('[MCP OAuth] OAuth callback error', error);
     res.redirect(getMCPOAuthErrorUrl(basePath, 'callback_failed'));
   }
